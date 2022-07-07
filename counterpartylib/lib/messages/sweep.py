@@ -14,7 +14,7 @@ FORMAT = '>21sB'
 LENGTH = 22
 MAX_MEMO_LENGTH = 34 # Could be higher, but we will keep it consistent with enhanced send
 ID = 4
-ANTISPAM_FEE_DECIMAL = 0.5
+ANTISPAM_FEE_DECIMAL = 0
 ANTISPAM_FEE = ANTISPAM_FEE_DECIMAL * config.UNIT
 
 FLAG_BALANCES = 1
@@ -60,11 +60,6 @@ def validate (db, source, destination, flags, memo, block_index):
     cursor = db.cursor()
     cursor.execute('''SELECT * FROM balances WHERE (address = ? AND asset = ?)''', (source, 'XCP'))
     result = cursor.fetchall()
-
-    if len(result) == 0:
-        problems.append('insufficient XCP balance for sweep. Need %s XCP for antispam fee' % ANTISPAM_FEE_DECIMAL)
-    elif result[0]['quantity'] < ANTISPAM_FEE:
-        problems.append('insufficient XCP balance for sweep. Need %s XCP for antispam fee' % ANTISPAM_FEE_DECIMAL)
 
     cursor.close()
 
@@ -151,13 +146,6 @@ def parse (db, tx, message):
     if status == 'valid':
         problems = validate(db, tx['source'], destination, flags, memo_bytes, tx['block_index'])
         if problems: status = 'invalid: ' + '; '.join(problems)
-
-    if status == 'valid':
-        try:
-            util.debit(db, tx['source'], 'XCP', fee_paid, action='sweep fee', event=tx['tx_hash'])
-        except BalanceError:
-            destination, flags, memo_bytes = None, None, None
-            status = 'invalid: insufficient balance for antispam fee for sweep'
 
     if status == 'valid':
         cursor.execute('''SELECT * FROM balances WHERE address = ?''', (tx['source'],))
